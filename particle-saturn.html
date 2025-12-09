@@ -315,28 +315,45 @@
 
             async setup() {
                 try {
-                    // 加载MediaPipe Hands库
+                    // 立即隐藏loading，避免长时间显示
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    // 尝试加载MediaPipe Hands库
                     await this.loadMediaPipe();
                     this.isReady = true;
-                    document.getElementById('loading').style.display = 'none';
+                    console.log('MediaPipe Hands初始化成功');
                 } catch (error) {
                     console.error('手势检测初始化失败:', error);
                     // 失败时使用模拟模式
                     this.isReady = true;
-                    document.getElementById('loading').style.display = 'none';
+                    console.log('使用模拟手势检测模式');
                 }
             }
 
             async loadMediaPipe() {
-                // 动态加载MediaPipe Hands库
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/mediapipe-hands.min.js';
-                document.head.appendChild(script);
+                // 检查浏览器环境
+                if (typeof window.Hands === 'undefined') {
+                    // 动态加载MediaPipe Hands库
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/mediapipe-hands.min.js';
+                    document.head.appendChild(script);
+                    
+                    // 使用Promise.race添加超时处理
+                    const loadPromise = new Promise(resolve => script.onload = resolve);
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('MediaPipe加载超时')), 5000)
+                    );
+                    
+                    await Promise.race([loadPromise, timeoutPromise]);
+                }
                 
-                await new Promise(resolve => script.onload = resolve);
+                // 检查Hands对象是否可用
+                if (typeof window.Hands === 'undefined') {
+                    throw new Error('Hands对象不可用');
+                }
                 
                 // 初始化Hands模型
-                this.hands = new Hands({
+                this.hands = new window.Hands({
                     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
                 });
                 
@@ -388,8 +405,7 @@
                 
                 // 归一化距离到0-1范围
                 const maxDistance = Math.max(...distances);
-                const minDistance = Math.min(...distances);
-                const openness = (maxDistance - minDistance) / (0.15 - 0.02); // 近似归一化
+                const openness = maxDistance / 0.15; // 近似归一化
                 
                 return Math.max(0, Math.min(1, openness));
             }
@@ -591,9 +607,37 @@
             resizeCanvas();
             setupEventListeners();
 
-            const cameraReady = await initCamera();
-            if (cameraReady) {
-                detector = new PalmDetector(video);
+            try {
+                // 初始化摄像头
+                const cameraReady = await initCamera();
+                
+                if (cameraReady) {
+                    // 初始化粒子系统
+                    initParticles();
+                    
+                    // 启动动画
+                    animate();
+                    
+                    // 初始化手势检测器
+                    detector = new PalmDetector(video);
+                    
+                    // 启动手势检测
+                    detectLoop();
+                } else {
+                    // 摄像头初始化失败，隐藏loading
+                    document.getElementById('loading').style.display = 'none';
+                    console.log('摄像头初始化失败，使用模拟模式');
+                    
+                    // 使用模拟模式
+                    initParticles();
+                    animate();
+                    detectLoop();
+                }
+            } catch (error) {
+                console.error('初始化失败:', error);
+                document.getElementById('loading').style.display = 'none';
+                
+                // 发生错误时，使用模拟模式继续运行
                 initParticles();
                 animate();
                 detectLoop();
