@@ -258,20 +258,29 @@
             }
 
             draw(ctx) {
+                // 确保粒子可见
+                const currentRadius = Math.max(0.5, this.radius * (1 + palmOpenness * 0.5));
+                
                 ctx.save();
-                ctx.globalAlpha = this.brightness;
+                
+                // 绘制粒子主体
                 ctx.fillStyle = this.color;
+                ctx.globalAlpha = Math.max(0.5, this.brightness);
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius * (1 + palmOpenness * 0.5), 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, currentRadius, 0, Math.PI * 2);
                 ctx.fill();
                 
+                // 确保光晕效果不过度透明
+                ctx.globalAlpha = Math.max(0.3, this.brightness * 0.8);
+                
                 // 添加光晕效果
-                const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 3);
-                gradient.addColorStop(0, this.color + '80');
+                const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, currentRadius * 3);
+                gradient.addColorStop(0, this.color + 'FF');
+                gradient.addColorStop(0.5, this.color + '80');
                 gradient.addColorStop(1, this.color + '00');
                 ctx.fillStyle = gradient;
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius * 3, 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, currentRadius * 3, 0, Math.PI * 2);
                 ctx.fill();
                 
                 ctx.restore();
@@ -283,12 +292,19 @@
             particles = [];
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
+            
+            console.log('初始化粒子系统，中心坐标:', centerX, centerY);
+            console.log('画布尺寸:', canvas.width, canvas.height);
 
             // 创建核心粒子
             for (let i = 0; i < CONFIG.CORE_PARTICLES; i++) {
                 const radius = Math.random() * 3 + 1;
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * 50;
+                const x = centerX + Math.cos(angle) * distance;
+                const y = centerY + Math.sin(angle) * distance;
                 const color = `hsl(45, 100%, ${60 + Math.random() * 40}%)`;
-                particles.push(new Particle('core', centerX, centerY, 0, 0, radius, color));
+                particles.push(new Particle('core', x, y, 0, 0, radius, color));
             }
 
             // 创建环形粒子
@@ -302,6 +318,8 @@
                 const color = `hsl(${hue}, 70%, ${50 + Math.random() * 30}%)`;
                 particles.push(new Particle('ring', x, y, 0, 0, radius, color));
             }
+            
+            console.log('粒子初始化完成，总数:', particles.length);
         }
 
         // 手势检测
@@ -458,12 +476,31 @@
 
         // 动画循环
         function animate() {
+            // 确保画布尺寸正确
+            if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+                resizeCanvas();
+            }
+            
+            // 清空画布
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
+            // 绘制背景
             drawBackground();
+            
+            // 更新粒子
             updateParticles();
+            
+            // 绘制粒子
             drawParticles();
-
+            
+            // 显示调试信息
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.font = '14px Arial';
+            ctx.fillText(`粒子数量: ${particles.length}`, 10, 25);
+            ctx.fillText(`缩放: ${scale.toFixed(2)}`, 10, 45);
+            ctx.fillText(`亮度: ${brightness.toFixed(2)}`, 10, 65);
+            
+            // 继续动画
             animationId = requestAnimationFrame(animate);
         }
 
@@ -604,42 +641,34 @@
             ctx = canvas.getContext('2d');
             video = document.getElementById('camera');
 
+            // 立即初始化粒子系统，确保粒子显示
+            initParticles();
+            
+            // 立即启动动画，确保粒子渲染
+            animate();
+            
             resizeCanvas();
             setupEventListeners();
+            
+            // 隐藏loading，确保用户能看到粒子效果
+            document.getElementById('loading').style.display = 'none';
 
             try {
                 // 初始化摄像头
                 const cameraReady = await initCamera();
                 
-                if (cameraReady) {
-                    // 初始化粒子系统
-                    initParticles();
-                    
-                    // 启动动画
-                    animate();
-                    
-                    // 初始化手势检测器
-                    detector = new PalmDetector(video);
-                    
-                    // 启动手势检测
-                    detectLoop();
-                } else {
-                    // 摄像头初始化失败，隐藏loading
-                    document.getElementById('loading').style.display = 'none';
-                    console.log('摄像头初始化失败，使用模拟模式');
-                    
-                    // 使用模拟模式
-                    initParticles();
-                    animate();
-                    detectLoop();
-                }
+                // 初始化手势检测器
+                detector = new PalmDetector(video);
+                
+                // 启动手势检测
+                detectLoop();
+                
+                console.log('应用初始化完成');
             } catch (error) {
                 console.error('初始化失败:', error);
-                document.getElementById('loading').style.display = 'none';
                 
-                // 发生错误时，使用模拟模式继续运行
-                initParticles();
-                animate();
+                // 使用模拟模式
+                console.log('使用模拟手势检测模式');
                 detectLoop();
             }
         }
